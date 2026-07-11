@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from typing import Any, List, Optional
 
-from ...protocols import AgentEvent, AgentState, AgentTask, JsonDict, new_id, utc_now
+from ...protocols import (
+    AgentEvent,
+    AgentState,
+    AgentTask,
+    JsonDict,
+    ensure_json_dict,
+    ensure_json_dict_list,
+    ensure_string_list,
+    new_id,
+    utc_now,
+)
 
 
 TERMINAL_TASK_STATES = {"completed", "failed", "cancelled"}
@@ -14,6 +24,7 @@ class TaskSystem:
     """Own task truth, task-tree readiness, and lifecycle transitions."""
 
     def apply_event(self, state: AgentState, event: AgentEvent) -> None:
+        self._normalize_structured_fields(state)
         if event.type == "user.message":
             content = str(event.payload.get("content", ""))
             state.workspace.add_transcript("user", content, event_id=event.event_id)
@@ -57,7 +68,7 @@ class TaskSystem:
             purpose=purpose,
             status="runnable",
             parent_task_id=parent_task_id,
-            dependencies=self._unique_ids(dependencies or []),
+            dependencies=self._unique_ids(ensure_string_list(dependencies)),
             workspace_ref=state.workspace.workspace_id,
             continuation=continuation or {},
         )
@@ -73,6 +84,8 @@ class TaskSystem:
         return task
 
     def add_wait(self, state: AgentState, task_id: str, condition: JsonDict) -> None:
+        self._normalize_structured_fields(state)
+        condition = ensure_json_dict(condition)
         task = state.tasks[task_id]
         if self._wait_condition_satisfied(state, condition):
             if task.status not in TERMINAL_TASK_STATES and not task.active_action_runs:
@@ -88,6 +101,8 @@ class TaskSystem:
         self.reconcile(state)
 
     def update_task(self, state: AgentState, task_id: str, patch: JsonDict) -> JsonDict:
+        self._normalize_structured_fields(state)
+        patch = ensure_json_dict(patch)
         task = state.tasks[task_id]
         allowed = {
             "title",
@@ -132,6 +147,12 @@ class TaskSystem:
                 task.dependencies = self._unique_ids(value)
                 applied[key] = list(task.dependencies)
                 continue
+            if key in {"progress", "result", "error", "continuation"}:
+                scalar_key = "message" if key in {"progress", "error"} else "value"
+                normalized_value = ensure_json_dict(value, scalar_key=scalar_key)
+                setattr(task, key, normalized_value)
+                applied[key] = normalized_value
+                continue
             setattr(task, key, value)
             applied[key] = value
         if applied or rejected:
@@ -147,6 +168,9 @@ class TaskSystem:
     ) -> JsonDict:
         self.reconcile(state)
         task = state.tasks[task_id]
+        normalized_result = (
+            ensure_json_dict(result) if result is not None else task.result
+        )
         if task.status == "completed":
             return {
                 "task_id": task_id,
@@ -156,7 +180,7 @@ class TaskSystem:
                 "already_completed": True,
                 "blockers": [],
             }
-        blockers = self._completion_blockers(state, task, result=result)
+        blockers = self._completion_blockers(state, task, result=normalized_result)
         if blockers:
             self.defer_completion(
                 state,
@@ -174,7 +198,7 @@ class TaskSystem:
             }
 
         task.status = "completed"
-        task.result = result if result is not None else task.result
+        task.result = normalized_result
         task.waiting_on.clear()
         task.active_action_runs.clear()
         task.progress.pop("completion_deferred", None)
@@ -201,6 +225,7 @@ class TaskSystem:
         reason: str,
         blockers: List[JsonDict],
     ) -> JsonDict:
+        self._normalize_structured_fields(state)
         task = state.tasks[task_id]
         previous = task.progress.get("completion_deferred")
         attempt_count = 1
@@ -231,6 +256,7 @@ class TaskSystem:
         reason: str,
         decision_summary: str,
     ) -> None:
+        self._normalize_structured_fields(state)
         task = state.tasks[task_id]
         previous = task.progress.get("scheduler_stall")
         count = 1
@@ -251,6 +277,7 @@ class TaskSystem:
         self.reconcile(state)
 
     def cancel_task(self, state: AgentState, task_id: str, reason: str) -> None:
+        self._normalize_structured_fields(state)
         task = state.tasks[task_id]
         targets = sorted(
             [*self.descendants(state, task_id), task],
@@ -279,6 +306,7 @@ class TaskSystem:
     def reconcile(self, state: AgentState) -> None:
         """Recompute operational status from actions, waits, dependencies, and children."""
 
+        self._normalize_structured_fields(state)
         self._repair_parent_links(state)
         for task in state.tasks.values():
             task.dependencies = self._unique_ids(task.dependencies)
@@ -731,7 +759,10 @@ class TaskSystem:
         if not event.action_run_id or event.action_run_id not in state.action_runs:
             return
         run = state.action_runs[event.action_run_id]
-        run.progress = dict(event.payload.get("progress", {}))
+        run.progress = ensure_json_dict(
+            event.payload.get("progress"),
+            scalar_key="message",
+        )
         run.status = "running"
         if run.task_id in state.tasks:
             task = state.tasks[run.task_id]
@@ -752,7 +783,7 @@ class TaskSystem:
             return
         run.status = "succeeded"
         run.finished_at = utc_now()
-        run.result = dict(event.payload.get("result", {}))
+        run.result = ensure_json_dict(event.payload.get("result"))
         run.progress = {"percent": 100, "message": "completed"}
         if run.task_id in state.tasks:
             task = state.tasks[run.task_id]
@@ -793,7 +824,10 @@ class TaskSystem:
             return
         run.status = "failed"
         run.finished_at = utc_now()
-        run.error = dict(event.payload.get("error", {}))
+        run.error = ensure_json_dict(
+            event.payload.get("error"),
+            scalar_key="message",
+        )
         if run.task_id in state.tasks:
             task = state.tasks[run.task_id]
             if run.action_run_id in task.active_action_runs:
@@ -881,11 +915,11 @@ class TaskSystem:
             task.progress.pop("percent", None)
             task.progress.pop("message", None)
             repaired = True
-        if task.result is not None and any(
+        if task.result and any(
             run.task_id == task.task_id and run.result == task.result
             for run in state.action_runs.values()
         ):
-            task.result = None
+            task.result = {}
             repaired = True
         if repaired:
             task.touch()
@@ -914,6 +948,25 @@ class TaskSystem:
             state.workspace.current_task_id = selected.task_id
             return
         state.workspace.current_task_id = None
+
+    def _normalize_structured_fields(self, state: AgentState) -> None:
+        """Repair legacy or externally-mutated structured state before use."""
+
+        for task in state.tasks.values():
+            task.child_task_ids = ensure_string_list(task.child_task_ids)
+            task.dependencies = ensure_string_list(task.dependencies)
+            task.active_action_runs = ensure_string_list(task.active_action_runs)
+            task.waiting_on = ensure_json_dict_list(task.waiting_on)
+            task.scheduling = ensure_json_dict(task.scheduling)
+            task.progress = ensure_json_dict(task.progress, scalar_key="message")
+            task.result = ensure_json_dict(task.result)
+            task.error = ensure_json_dict(task.error, scalar_key="message")
+            task.continuation = ensure_json_dict(task.continuation)
+        for run in state.action_runs.values():
+            run.args = ensure_json_dict(run.args)
+            run.progress = ensure_json_dict(run.progress, scalar_key="message")
+            run.result = ensure_json_dict(run.result)
+            run.error = ensure_json_dict(run.error, scalar_key="message")
 
     def _wait_condition_satisfied(
         self,

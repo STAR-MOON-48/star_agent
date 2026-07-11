@@ -17,6 +17,8 @@ from textual.css.query import NoMatches
 from textual.message import Message
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Static
 
+from agent.protocols import ensure_json_dict
+
 
 NoticeCallback = Callable[[str, dict[str, Any]], None]
 
@@ -95,7 +97,7 @@ class ConsoleEnvironmentClient(EnvironmentClient):
     async def on_action(self, sender: str, content: dict[str, Any]) -> None:
         action_name = str(content.get("name") or "unknown")
         action_id = str(content.get("id") or "")
-        params = dict(content.get("params") or {})
+        params = ensure_json_dict(content.get("params"))
         self.notice(
             "environment_action",
             {

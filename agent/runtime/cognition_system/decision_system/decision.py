@@ -4,7 +4,16 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from ....config import DecisionConfig
-from ....protocols import ActionSpec, AgentEvent, AgentState, GeneratorDecision, JsonDict, utc_now
+from ....protocols import (
+    ActionSpec,
+    AgentEvent,
+    AgentState,
+    GeneratorDecision,
+    JsonDict,
+    ensure_json_dict,
+    ensure_json_dict_list,
+    utc_now,
+)
 from ...kernel.generator_runtime import GeneratorRuntime
 from ...state_systems import ContextBuilder, MemorySystem
 from ..emotion_system import EmotionSystem
@@ -20,6 +29,13 @@ class DecisionEvaluation:
     model_tools: list[JsonDict]
     decision: GeneratorDecision
     model_trace: JsonDict
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "context", ensure_json_dict(self.context))
+        object.__setattr__(self, "public_context", ensure_json_dict(self.public_context))
+        object.__setattr__(self, "model_tools", ensure_json_dict_list(self.model_tools))
+        object.__setattr__(self, "decision", ensure_json_dict(self.decision))
+        object.__setattr__(self, "model_trace", ensure_json_dict(self.model_trace))
 
 
 class DecisionSystem:
@@ -130,9 +146,18 @@ class DecisionSystem:
         if not isinstance(commands, list):
             normalized["commands"] = []
         else:
-            normalized["commands"] = [
-                dict(command) for command in commands if isinstance(command, dict)
-            ]
+            normalized_commands: list[JsonDict] = []
+            for command in commands:
+                if not isinstance(command, dict):
+                    continue
+                normalized_command = dict(command)
+                for key in ("args", "condition", "continuation", "patch", "result"):
+                    if key in normalized_command:
+                        normalized_command[key] = ensure_json_dict(
+                            normalized_command[key]
+                        )
+                normalized_commands.append(normalized_command)
+            normalized["commands"] = normalized_commands
         normalized["decision_summary"] = str(
             normalized.get("decision_summary") or ""
         )

@@ -5,7 +5,17 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Iterable, Optional
 
 from ...config import ContextPolicyConfig, DmnConfig
-from ...protocols import ActionRun, ActionSpec, AgentEvent, AgentState, AgentTask, GeneratorDecision, JsonDict, utc_now
+from ...protocols import (
+    ActionRun,
+    ActionSpec,
+    AgentEvent,
+    AgentState,
+    AgentTask,
+    GeneratorDecision,
+    JsonDict,
+    ensure_json_dict,
+    utc_now,
+)
 from ..state_systems.context_policy import (
     CONTEXT_POLICY_VARIABLE_KEY,
     ContextCandidate,
@@ -32,6 +42,12 @@ class DMNReflection:
     decision: GeneratorDecision
     model_trace: JsonDict
     emitted_events: list[AgentEvent] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "context", ensure_json_dict(self.context))
+        object.__setattr__(self, "public_context", ensure_json_dict(self.public_context))
+        object.__setattr__(self, "decision", ensure_json_dict(self.decision))
+        object.__setattr__(self, "model_trace", ensure_json_dict(self.model_trace))
 
 
 class DMNSystem:

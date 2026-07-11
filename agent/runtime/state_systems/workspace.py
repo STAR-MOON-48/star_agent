@@ -13,6 +13,7 @@ from ...protocols import (
     AgentState,
     AgentTask,
     JsonDict,
+    ensure_json_dict,
     new_id,
     utc_now,
 )
@@ -1188,7 +1189,7 @@ class ContextBuilder:
         return any(word in text for word in ["analysis", "analyze", "report", "分析", "报告"])
 
     def _action_spec_to_model_tool(self, spec: ActionSpec) -> JsonDict:
-        parameters = dict(spec.input_schema or {})
+        parameters = ensure_json_dict(spec.input_schema)
         if not parameters:
             parameters = {"type": "object", "properties": {}}
         elif "type" not in parameters:

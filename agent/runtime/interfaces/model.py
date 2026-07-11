@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from ...protocols import JsonDict
+from ...protocols import JsonDict, ensure_json_dict
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,9 @@ class ModelResult:
     model: Optional[str] = None
     usage: JsonDict = field(default_factory=dict)
     raw: Any = None
+
+    def __post_init__(self) -> None:
+        self.usage = ensure_json_dict(self.usage)
 
 
 class ModelInterface(ABC):

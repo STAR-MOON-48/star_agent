@@ -7,7 +7,14 @@ from typing import Any, Dict, List, Optional, Set
 from .event_bus import EventBus
 from .generator_runtime import GeneratorRuntime
 from ...config import AgentConfig, load_agent_config
-from ...protocols import AgentEvent, AgentState, AgentTask, GeneratorDecision, JsonDict
+from ...protocols import (
+    AgentEvent,
+    AgentState,
+    AgentTask,
+    GeneratorDecision,
+    JsonDict,
+    ensure_json_dict,
+)
 from ..action_systems.actions import ActionExecutor, ActionRegistry
 from ..action_systems.task_system import TaskSystem
 from ..cognition_system import (
@@ -1065,7 +1072,7 @@ class AgentRuntime:
                 task.progress.pop("message", None)
                 task.progress.pop("retry_count", None)
             if isinstance(task.error, dict) and "generator_error" in task.error:
-                task.error = None
+                task.error = {}
             task.touch()
 
     def _is_retryable_generator_error(self, exc: Exception) -> bool:
@@ -1101,6 +1108,11 @@ class AgentRuntime:
         event: AgentEvent,
         decision: GeneratorDecision,
     ) -> List[AgentEvent]:
+        commands = [
+            command
+            for command in decision.get("commands", [])
+            if isinstance(command, dict)
+        ]
         ref_map: Dict[str, str] = {}
         emitted_events: List[AgentEvent] = []
         sent_reply = False
@@ -1108,11 +1120,10 @@ class AgentRuntime:
         deferred_completion_task_ids: List[str] = []
         task_graph_changed = False
         has_action_command = any(
-            isinstance(command, dict) and command.get("type") == "start_action"
-            for command in decision.get("commands", [])
+            command.get("type") == "start_action" for command in commands
         )
 
-        for command in decision.get("commands", []):
+        for command in commands:
             ctype = command.get("type")
 
             if ctype == "reply":
@@ -1136,7 +1147,7 @@ class AgentRuntime:
                 continue
 
             if ctype == "create_task":
-                continuation = dict(command.get("continuation") or {})
+                continuation = ensure_json_dict(command.get("continuation"))
                 reply_recipient = self._reply_recipient_for_event(state, event)
                 if reply_recipient:
                     continuation.setdefault("reply_recipient", reply_recipient)
@@ -1185,10 +1196,10 @@ class AgentRuntime:
                     )
                 try:
                     action_events = await self.action_executor.start_action(
-                        state=state,
-                        task_id=task_id,
-                        action_name=action_name,
-                        args=command.get("args") or {},
+                    state=state,
+                    task_id=task_id,
+                    action_name=action_name,
+                    args=ensure_json_dict(command.get("args")),
                         mode_hint=command.get("mode_hint"),
                         causation_id=event.event_id,
                         causation_event=event,
@@ -1234,7 +1245,7 @@ class AgentRuntime:
 
             if ctype == "wait":
                 task_id = self._resolve_task_id(state, command, ref_map)
-                condition = dict(command.get("condition") or {})
+                condition = ensure_json_dict(command.get("condition"))
                 # If the generator used action_name-level waiting, bind it to the latest run.
                 task_ref = command.get("task_ref")
                 if task_ref and not condition.get("action_run_id"):
@@ -1253,7 +1264,11 @@ class AgentRuntime:
 
             if ctype == "update_task":
                 task_id = self._resolve_task_id(state, command, ref_map)
-                self.task_system.update_task(state, task_id, command.get("patch") or {})
+                self.task_system.update_task(
+                    state,
+                    task_id,
+                    ensure_json_dict(command.get("patch")),
+                )
                 task_graph_changed = True
                 continue
 

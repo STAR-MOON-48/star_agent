@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from ...config import ContextPolicyConfig
-from ...protocols import JsonDict
+from ...protocols import JsonDict, ensure_json_dict
 
 
 CONTEXT_POLICY_VARIABLE_KEY = "context_policy"
@@ -56,6 +56,9 @@ class ContextCandidate:
     mandatory: bool = False
     token_multiplier: float = 1.0
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "ref", ensure_json_dict(self.ref))
+
     def estimated_tokens(self, policy: ContextPolicyConfig) -> int:
         return max(1, math.ceil(estimate_tokens(self.value, policy) * self.token_multiplier))
 
@@ -67,6 +70,9 @@ class ContextSelection:
     used_tokens: int
     budget_tokens: int
     manifest: JsonDict
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "manifest", ensure_json_dict(self.manifest))
 
 
 def select_candidates(

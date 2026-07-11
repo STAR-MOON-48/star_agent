@@ -10,6 +10,8 @@ from ....protocols import (
     ConversationTurn,
     ConversationUnderstanding,
     JsonDict,
+    ensure_json_dict,
+    ensure_json_dict_list,
     new_id,
 )
 from ...kernel.generator_runtime import GeneratorRuntime
@@ -25,6 +27,14 @@ class WernickeResult:
     understanding: ConversationUnderstanding
     trace: JsonDict
     model_tools: List[JsonDict]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "trace", ensure_json_dict(self.trace))
+        object.__setattr__(
+            self,
+            "model_tools",
+            ensure_json_dict_list(self.model_tools),
+        )
 
 
 class WernickeSystem:

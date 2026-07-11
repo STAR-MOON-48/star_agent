@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..protocols import AgentProfile, JsonDict
+from ..protocols import AgentProfile, JsonDict, ensure_json_dict
 
 
 @dataclass(frozen=True)
@@ -417,14 +417,19 @@ class AgentConfig:
 
     @staticmethod
     def from_dict(data: JsonDict, *, source: str) -> "AgentConfig":
-        profile = data.get("agent", {}).get("profile", {})
-        generator = data.get("generator", {})
-        star = data.get("entrypoints", {}).get("star", {})
-        dmn = data.get("cognition", {}).get("dmn", {})
-        conversation = data.get("cognition", {}).get("conversation", {})
-        memory = data.get("state", {}).get("memory", {})
-        emotion = data.get("cognition", {}).get("emotion", {})
-        decision = data.get("cognition", {}).get("decision", {})
+        data = ensure_json_dict(data)
+        agent = ensure_json_dict(data.get("agent"))
+        entrypoints = ensure_json_dict(data.get("entrypoints"))
+        cognition = ensure_json_dict(data.get("cognition"))
+        state = ensure_json_dict(data.get("state"))
+        profile = ensure_json_dict(agent.get("profile"))
+        generator = ensure_json_dict(data.get("generator"))
+        star = ensure_json_dict(entrypoints.get("star"))
+        dmn = ensure_json_dict(cognition.get("dmn"))
+        conversation = ensure_json_dict(cognition.get("conversation"))
+        memory = ensure_json_dict(state.get("memory"))
+        emotion = ensure_json_dict(cognition.get("emotion"))
+        decision = ensure_json_dict(cognition.get("decision"))
         return AgentConfig(
             profile=ProfileConfig(
                 name=str(profile.get("name", "")),
@@ -443,17 +448,11 @@ class AgentConfig:
             star=StarEntryConfig(
                 startup_objective=str(star.get("startup_objective", "")),
             ),
-            dmn=DmnConfig.from_dict(dmn if isinstance(dmn, dict) else {}),
-            conversation=ConversationConfig.from_dict(
-                conversation if isinstance(conversation, dict) else {}
-            ),
-            memory=MemoryConfig.from_dict(memory if isinstance(memory, dict) else {}),
-            emotion=EmotionConfig.from_dict(
-                emotion if isinstance(emotion, dict) else {}
-            ),
-            decision=DecisionConfig.from_dict(
-                decision if isinstance(decision, dict) else {}
-            ),
+            dmn=DmnConfig.from_dict(dmn),
+            conversation=ConversationConfig.from_dict(conversation),
+            memory=MemoryConfig.from_dict(memory),
+            emotion=EmotionConfig.from_dict(emotion),
+            decision=DecisionConfig.from_dict(decision),
             source=source,
         )
 

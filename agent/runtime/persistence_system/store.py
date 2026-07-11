@@ -25,7 +25,8 @@ class JsonStateStore:
         if not path.exists():
             return AgentState.new(agent_id)
         with path.open("r", encoding="utf-8") as f:
-            return AgentState.from_dict(json.load(f))
+            data = json.load(f)
+        return AgentState.from_dict(data) if isinstance(data, dict) else AgentState.new(agent_id)
 
     def save_state(self, state: AgentState) -> None:
         path = self._state_path(state.agent_id)

@@ -42,6 +42,12 @@ Generator 输出结构化 command。Runtime 解释 command，并通过 TaskSyste
 
 Task 是语义活动；ActionRun 是一次具体能力执行。
 
+### 1.6 结构化字段保持 object
+
+协议中声明为 `object` / `JsonDict` 的字段，在内存和持久化状态中始终是字典；声明为
+`object[]` 的字段始终是字典列表。模型输出、外部协议或旧存档传入标量时，统一在协议
+边界规范化，不允许字符串继续流入运行时后再由 `.get()`、`.pop()` 等操作触发错误。
+
 ---
 
 ## 2. AgentEvent
@@ -278,8 +284,8 @@ type AgentTask = {
 
   progress: object
   result_ref?: string
-  result?: object
-  error?: object
+  result: object
+  error: object
 
   workspace_ref?: string
   continuation: object
@@ -392,8 +398,8 @@ type ActionRun = {
   status: "created" | "running" | "succeeded" | "failed" | "cancelled"
 
   progress: object
-  result?: object
-  error?: object
+  result: object
+  error: object
 
   created_at: string
   started_at?: string
@@ -410,6 +416,10 @@ ActionRun = Task 下的一次具体能力执行
 ```
 
 一个 Task 可以包含多个 ActionRun。
+
+`progress`、`result`、`error`、`continuation`、`scheduling`、ActionRun
+的 `args` 都始终保存为 JSON object。旧状态或模型 patch 中出现标量时，协议边界会
+将其规范化为带 `value` 或 `message` 字段的 object，避免结构化状态发生类型污染。
 
 当前实现使用 `task_id + action_name + canonical JSON(args)` 的 SHA-256
 摘要生成稳定 `idempotency_key`。Runtime 重启后，同一 Task 中已经成功的副作用

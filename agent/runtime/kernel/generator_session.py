@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 from uuid import uuid4
 
-from ...protocols import GeneratorDecision, JsonDict
+from ...protocols import GeneratorDecision, JsonDict, ensure_json_dict
 from ..interfaces.model import ModelInterface, ModelResult
 
 
@@ -21,6 +21,10 @@ class GeneratorRequest:
     runtime_context: JsonDict = field(default_factory=dict)
     model_kwargs: JsonDict = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "runtime_context", ensure_json_dict(self.runtime_context))
+        object.__setattr__(self, "model_kwargs", ensure_json_dict(self.model_kwargs))
+
 
 @dataclass(frozen=True)
 class GeneratorResult:
@@ -28,6 +32,10 @@ class GeneratorResult:
 
     decision: GeneratorDecision
     trace: JsonDict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "decision", ensure_json_dict(self.decision))
+        object.__setattr__(self, "trace", ensure_json_dict(self.trace))
 
 
 @dataclass(frozen=True)
@@ -37,6 +45,9 @@ class ModelRequest:
     request_id: str
     context: Any
     kwargs: JsonDict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "kwargs", ensure_json_dict(self.kwargs))
 
 
 class GeneratorSession(ABC):
@@ -710,7 +721,9 @@ def _objective_title(objective: str) -> str:
 
 def _tool_call_name(tool_call: Any) -> str:
     if isinstance(tool_call, dict):
-        return str(tool_call.get("name") or tool_call.get("function", {}).get("name") or "")
+        function = tool_call.get("function")
+        function_name = function.get("name") if isinstance(function, dict) else ""
+        return str(tool_call.get("name") or function_name or "")
     return str(getattr(tool_call, "name", "") or "")
 
 

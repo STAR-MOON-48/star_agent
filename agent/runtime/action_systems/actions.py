@@ -13,6 +13,7 @@ from ...protocols import (
     AgentState,
     AgentTask,
     JsonDict,
+    ensure_json_dict,
     new_id,
     utc_now,
 )
@@ -302,7 +303,27 @@ class ActionRegistry:
                     "properties": {
                         "task_id": {"type": "string"},
                         "task_ref": {"type": "string"},
-                        "patch": {"type": "object"},
+                        "patch": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "goal": {"type": "string"},
+                                "purpose": {"type": "string"},
+                                "status": {
+                                    "type": "string",
+                                    "enum": ["created", "runnable", "waiting", "blocked"],
+                                },
+                                "dependencies": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "progress": {"type": "object"},
+                                "result": {"type": "object"},
+                                "error": {"type": "object"},
+                                "continuation": {"type": "object"},
+                            },
+                            "additionalProperties": False,
+                        },
                     },
                     "required": ["patch"],
                     "additionalProperties": False,
@@ -399,6 +420,7 @@ class ActionExecutor:
         causation_id: Optional[str] = None,
         causation_event: Optional[AgentEvent] = None,
     ) -> List[AgentEvent]:
+        args = ensure_json_dict(args)
         spec = self.registry.get(action_name)
         if spec.source == "internal_runtime":
             return await self._execute_internal_runtime_action(
@@ -453,7 +475,7 @@ class ActionExecutor:
                     idempotency_key=idempotency_key,
                     payload={
                         "action_name": action_name,
-                        "result": dict(succeeded.result or {}),
+                        "result": ensure_json_dict(succeeded.result),
                         "deduplicated": True,
                     },
                 )

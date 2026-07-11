@@ -8,7 +8,7 @@ from typing import Any, Iterable, Optional
 from star_protocol.client import AgentClient
 from star_protocol.models import Envelope, MessagePayload, gen_id
 
-from ...protocols import ActionSpec, AgentEvent, JsonDict
+from ...protocols import ActionSpec, AgentEvent, JsonDict, ensure_json_dict
 from ..perception_systems import PerceptionSystem
 from .protocol import ProtocolInterface
 
@@ -352,7 +352,9 @@ class StarSession(ProtocolInterface):
         return ActionSpec(
             name=str(name),
             description=str(tool.get("description", "")),
-            input_schema=dict(tool.get("parameters") or tool.get("input_schema") or {}),
+            input_schema=ensure_json_dict(
+                tool.get("parameters") or tool.get("input_schema")
+            ),
             mode="async",
             timeout_ms=int(tool.get("timeout_ms", 60_000)),
             cancelable=False,

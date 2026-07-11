@@ -4,7 +4,12 @@ from hashlib import sha256
 import json
 from typing import TYPE_CHECKING, Any, Optional
 
-from ...protocols import AgentEvent, JsonDict
+from ...protocols import (
+    AgentEvent,
+    JsonDict,
+    ensure_json_dict,
+    ensure_json_dict_list,
+)
 
 if TYPE_CHECKING:
     from ..kernel.event_bus import EventBus
@@ -61,7 +66,7 @@ class PerceptionSystem:
         return self._protocol_event(
             agent_id=agent_id,
             event_type="protocol.tool_specification",
-            payload={"sender": sender, "tools": tools},
+            payload={"sender": sender, "tools": ensure_json_dict_list(tools)},
         )
 
     def star_outcome(
@@ -71,6 +76,7 @@ class PerceptionSystem:
         sender: str,
         content: JsonDict,
     ) -> AgentEvent:
+        content = ensure_json_dict(content)
         return self._protocol_event(
             agent_id=agent_id,
             event_type="protocol.outcome",
@@ -84,8 +90,9 @@ class PerceptionSystem:
         sender: str,
         content: JsonDict,
     ) -> AgentEvent:
+        content = ensure_json_dict(content)
         action_name = str(content.get("name") or "")
-        params = dict(content.get("params") or {})
+        params = ensure_json_dict(content.get("params"))
         if self.is_user_message_name(action_name):
             return self._user_message_from_star(
                 agent_id=agent_id,
@@ -107,6 +114,7 @@ class PerceptionSystem:
         content: JsonDict,
         broadcast: bool = False,
     ) -> AgentEvent:
+        content = ensure_json_dict(content)
         event_name = str(content.get("name") or content.get("type") or "")
         if self.is_user_message_name(event_name):
             data = content.get("data")
@@ -134,6 +142,7 @@ class PerceptionSystem:
         content: JsonDict,
         broadcast: bool = False,
     ) -> AgentEvent:
+        content = ensure_json_dict(content)
         return self._protocol_event(
             agent_id=agent_id,
             event_type="protocol.stream",
@@ -163,7 +172,7 @@ class PerceptionSystem:
                 "action_name": action_name,
                 "external_action_id": external_action_id,
                 "sender": sender,
-                "result": result,
+                "result": ensure_json_dict(result),
             },
         )
 
@@ -206,6 +215,7 @@ class PerceptionSystem:
         content: JsonDict,
         causation_id: Optional[str] = None,
     ) -> AgentEvent:
+        content = ensure_json_dict(content)
         return AgentEvent.make(
             agent_id=agent_id,
             type="action.progress",
@@ -237,6 +247,8 @@ class PerceptionSystem:
         content: JsonDict,
         protocol_payload: JsonDict,
     ) -> AgentEvent:
+        content = ensure_json_dict(content)
+        protocol_payload = ensure_json_dict(protocol_payload)
         protocol_content = protocol_payload.get("content")
         transport_message_id = (
             protocol_content.get("id")
@@ -318,5 +330,5 @@ class PerceptionSystem:
             agent_id=agent_id,
             type=event_type,
             source="star_protocol",
-            payload=payload,
+            payload=ensure_json_dict(payload),
         )

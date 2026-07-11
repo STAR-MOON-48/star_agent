@@ -10,6 +10,7 @@ from ....protocols import (
     ConversationTurn,
     ConversationUnderstanding,
     JsonDict,
+    ensure_json_dict,
     utc_now,
 )
 from ...kernel.generator_runtime import GeneratorRuntime
@@ -478,7 +479,7 @@ class ConversationSystem:
         turn = self._optional_turn(state.agent_id, context.get("turn_id"))
         if turn is None:
             return
-        turn.decision = dict(decision)
+        turn.decision = ensure_json_dict(decision)
         has_action = any(
             isinstance(command, dict) and command.get("type") == "start_action"
             for command in decision.get("commands", [])
@@ -499,11 +500,11 @@ class ConversationSystem:
             return
         turn.status = "failed"
         if event.type == "conversation.understanding.requested":
-            turn.understanding = {"error": dict(error)}
+            turn.understanding = {"error": ensure_json_dict(error)}
         else:
             turn.speech_intent = {
                 **(turn.speech_intent or {}),
-                "error": dict(error),
+                "error": ensure_json_dict(error),
             }
         self.store.save_turn(turn)
 

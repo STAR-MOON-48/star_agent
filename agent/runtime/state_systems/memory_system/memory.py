@@ -7,7 +7,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from ....config import ContextPolicyConfig, MemoryConfig
-from ....protocols import AgentEvent, AgentState, JsonDict, utc_now
+from ....protocols import AgentEvent, AgentState, JsonDict, ensure_json_dict, utc_now
 from ...persistence_system import MemoryRecord, MemoryStore
 
 if TYPE_CHECKING:
@@ -43,6 +43,11 @@ class MemoryReflection:
     public_context: JsonDict
     record: MemoryRecord
     model_trace: JsonDict
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "context", ensure_json_dict(self.context))
+        object.__setattr__(self, "public_context", ensure_json_dict(self.public_context))
+        object.__setattr__(self, "model_trace", ensure_json_dict(self.model_trace))
 
 
 class MemorySystem:

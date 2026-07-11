@@ -15,6 +15,43 @@ from uuid import uuid4
 JsonDict = Dict[str, Any]
 
 
+def ensure_json_dict(value: Any, *, scalar_key: str = "value") -> JsonDict:
+    """Normalize one structured runtime value to a JSON object.
+
+    Runtime state is persisted across versions and may also be patched by model
+    tool calls.  Keeping this normalization at the protocol boundary prevents a
+    scalar legacy/model value from breaking later mapping operations.
+    """
+
+    if isinstance(value, dict):
+        return dict(value)
+    if value is None:
+        return {}
+    return {scalar_key: value}
+
+
+def ensure_json_dict_list(
+    value: Any,
+    *,
+    scalar_key: str = "value",
+) -> List[JsonDict]:
+    """Normalize a structured collection and every item inside it."""
+
+    if value is None:
+        return []
+    items = value if isinstance(value, (list, tuple)) else [value]
+    return [ensure_json_dict(item, scalar_key=scalar_key) for item in items]
+
+
+def ensure_string_list(value: Any) -> List[str]:
+    """Normalize a scalar or collection to a stable list of strings."""
+
+    if value is None:
+        return []
+    items = value if isinstance(value, (list, tuple, set)) else [value]
+    return [str(item) for item in items]
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -39,6 +76,9 @@ class AgentEvent:
     idempotency_key: Optional[str] = None
     priority: int = 100
     created_at: str = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        self.payload = ensure_json_dict(self.payload)
 
     @staticmethod
     def make(
@@ -117,6 +157,11 @@ class Workspace:
     last_decision_summary: str = ""
     updated_at: str = field(default_factory=utc_now)
 
+    def __post_init__(self) -> None:
+        self.notes = ensure_string_list(self.notes)
+        self.variables = ensure_json_dict(self.variables)
+        self.transcript = ensure_json_dict_list(self.transcript, scalar_key="content")
+
     def add_transcript(self, role: str, content: str, *, event_id: Optional[str] = None) -> None:
         self.transcript.append(
             {
@@ -137,7 +182,9 @@ class Workspace:
 
     @staticmethod
     def from_dict(data: JsonDict) -> "Workspace":
-        return Workspace(**data)
+        normalized = dict(data) if isinstance(data, dict) else {}
+        normalized.setdefault("workspace_id", new_id("ws"))
+        return Workspace(**normalized)
 
 
 @dataclass
@@ -158,13 +205,24 @@ class AgentTask:
     scheduling: JsonDict = field(default_factory=dict)
     progress: JsonDict = field(default_factory=dict)
     result_ref: Optional[str] = None
-    result: Optional[JsonDict] = None
-    error: Optional[JsonDict] = None
+    result: JsonDict = field(default_factory=dict)
+    error: JsonDict = field(default_factory=dict)
     workspace_ref: Optional[str] = None
     continuation: JsonDict = field(default_factory=dict)
     created_at: str = field(default_factory=utc_now)
     updated_at: str = field(default_factory=utc_now)
     version: int = 0
+
+    def __post_init__(self) -> None:
+        self.child_task_ids = ensure_string_list(self.child_task_ids)
+        self.dependencies = ensure_string_list(self.dependencies)
+        self.active_action_runs = ensure_string_list(self.active_action_runs)
+        self.waiting_on = ensure_json_dict_list(self.waiting_on)
+        self.scheduling = ensure_json_dict(self.scheduling)
+        self.progress = ensure_json_dict(self.progress, scalar_key="message")
+        self.result = ensure_json_dict(self.result)
+        self.error = ensure_json_dict(self.error, scalar_key="message")
+        self.continuation = ensure_json_dict(self.continuation)
 
     def touch(self) -> None:
         self.updated_at = utc_now()
@@ -175,7 +233,21 @@ class AgentTask:
 
     @staticmethod
     def from_dict(data: JsonDict) -> "AgentTask":
-        return AgentTask(**data)
+        normalized = dict(data)
+        normalized["scheduling"] = ensure_json_dict(normalized.get("scheduling"))
+        normalized["progress"] = ensure_json_dict(
+            normalized.get("progress"),
+            scalar_key="message",
+        )
+        normalized["result"] = ensure_json_dict(normalized.get("result"))
+        normalized["error"] = ensure_json_dict(
+            normalized.get("error"),
+            scalar_key="message",
+        )
+        normalized["continuation"] = ensure_json_dict(
+            normalized.get("continuation")
+        )
+        return AgentTask(**normalized)
 
 
 @dataclass
@@ -191,19 +263,36 @@ class ActionRun:
     source: str = "local"
     status: str = "created"  # created/running/succeeded/failed/cancelled
     progress: JsonDict = field(default_factory=dict)
-    result: Optional[JsonDict] = None
-    error: Optional[JsonDict] = None
+    result: JsonDict = field(default_factory=dict)
+    error: JsonDict = field(default_factory=dict)
     created_at: str = field(default_factory=utc_now)
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     idempotency_key: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        self.args = ensure_json_dict(self.args)
+        self.progress = ensure_json_dict(self.progress, scalar_key="message")
+        self.result = ensure_json_dict(self.result)
+        self.error = ensure_json_dict(self.error, scalar_key="message")
 
     def to_dict(self) -> JsonDict:
         return asdict(self)
 
     @staticmethod
     def from_dict(data: JsonDict) -> "ActionRun":
-        return ActionRun(**data)
+        normalized = dict(data)
+        normalized["args"] = ensure_json_dict(normalized.get("args"))
+        normalized["progress"] = ensure_json_dict(
+            normalized.get("progress"),
+            scalar_key="message",
+        )
+        normalized["result"] = ensure_json_dict(normalized.get("result"))
+        normalized["error"] = ensure_json_dict(
+            normalized.get("error"),
+            scalar_key="message",
+        )
+        return ActionRun(**normalized)
 
 
 @dataclass
@@ -221,6 +310,10 @@ class ActionSpec:
     source: str = "local"
     target: Optional[str] = None
     metadata: JsonDict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.input_schema = ensure_json_dict(self.input_schema)
+        self.metadata = ensure_json_dict(self.metadata)
 
     def to_dict(self) -> JsonDict:
         return asdict(self)
@@ -248,6 +341,14 @@ class ConversationUnderstanding:
     confidence: float = 0.5
     created_at: str = field(default_factory=utc_now)
 
+    def __post_init__(self) -> None:
+        self.intents = ensure_string_list(self.intents)
+        self.key_information = ensure_json_dict_list(self.key_information)
+        self.entities = ensure_json_dict_list(self.entities)
+        self.affect_cues = ensure_json_dict(self.affect_cues)
+        self.dialogue_obligations = ensure_string_list(self.dialogue_obligations)
+        self.ambiguities = ensure_string_list(self.ambiguities)
+
     def to_dict(self) -> JsonDict:
         return asdict(self)
 
@@ -271,15 +372,26 @@ class ConversationTurn:
     speaker_context: JsonDict = field(default_factory=dict)
     scene_context: JsonDict = field(default_factory=dict)
     status: str = "received"
-    understanding: Optional[JsonDict] = None
-    decision: Optional[JsonDict] = None
-    speech_intent: Optional[JsonDict] = None
+    understanding: JsonDict = field(default_factory=dict)
+    decision: JsonDict = field(default_factory=dict)
+    speech_intent: JsonDict = field(default_factory=dict)
     response_text: Optional[str] = None
     response_event_id: Optional[str] = None
     outbound_utterances: List[JsonDict] = field(default_factory=list)
     suppressed_speech_intents: List[JsonDict] = field(default_factory=list)
     created_at: str = field(default_factory=utc_now)
     updated_at: str = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        self.speaker_context = ensure_json_dict(self.speaker_context)
+        self.scene_context = ensure_json_dict(self.scene_context)
+        self.understanding = ensure_json_dict(self.understanding)
+        self.decision = ensure_json_dict(self.decision)
+        self.speech_intent = ensure_json_dict(self.speech_intent)
+        self.outbound_utterances = ensure_json_dict_list(self.outbound_utterances)
+        self.suppressed_speech_intents = ensure_json_dict_list(
+            self.suppressed_speech_intents
+        )
 
     def touch(self) -> None:
         self.updated_at = utc_now()
@@ -304,6 +416,10 @@ class ConversationSession:
     created_at: str = field(default_factory=utc_now)
     updated_at: str = field(default_factory=utc_now)
 
+    def __post_init__(self) -> None:
+        self.participant_ids = ensure_string_list(self.participant_ids)
+        self.turn_ids = ensure_string_list(self.turn_ids)
+
     def touch(self) -> None:
         self.updated_at = utc_now()
 
@@ -324,6 +440,28 @@ class ConversationState:
     turns: Dict[str, ConversationTurn] = field(default_factory=dict)
     updated_at: str = field(default_factory=utc_now)
 
+    def __post_init__(self) -> None:
+        raw_sessions = self.sessions if isinstance(self.sessions, dict) else {}
+        raw_turns = self.turns if isinstance(self.turns, dict) else {}
+        self.sessions = {
+            str(key): (
+                value
+                if isinstance(value, ConversationSession)
+                else ConversationSession.from_dict(value)
+            )
+            for key, value in raw_sessions.items()
+            if isinstance(value, (ConversationSession, dict))
+        }
+        self.turns = {
+            str(key): (
+                value
+                if isinstance(value, ConversationTurn)
+                else ConversationTurn.from_dict(value)
+            )
+            for key, value in raw_turns.items()
+            if isinstance(value, (ConversationTurn, dict))
+        }
+
     def to_dict(self) -> JsonDict:
         return {
             "agent_id": self.agent_id,
@@ -334,15 +472,19 @@ class ConversationState:
 
     @staticmethod
     def from_dict(data: JsonDict) -> "ConversationState":
+        sessions = data.get("sessions") if isinstance(data.get("sessions"), dict) else {}
+        turns = data.get("turns") if isinstance(data.get("turns"), dict) else {}
         return ConversationState(
             agent_id=str(data["agent_id"]),
             sessions={
-                key: ConversationSession.from_dict(value)
-                for key, value in data.get("sessions", {}).items()
+                str(key): ConversationSession.from_dict(value)
+                for key, value in sessions.items()
+                if isinstance(value, dict)
             },
             turns={
-                key: ConversationTurn.from_dict(value)
-                for key, value in data.get("turns", {}).items()
+                str(key): ConversationTurn.from_dict(value)
+                for key, value in turns.items()
+                if isinstance(value, dict)
             },
             updated_at=str(data.get("updated_at") or utc_now()),
         )
@@ -361,6 +503,23 @@ class AgentState:
     version: int = 0
     created_at: str = field(default_factory=utc_now)
     updated_at: str = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        raw_tasks = self.tasks if isinstance(self.tasks, dict) else {}
+        raw_runs = self.action_runs if isinstance(self.action_runs, dict) else {}
+        self.tasks = {
+            str(key): value if isinstance(value, AgentTask) else AgentTask.from_dict(value)
+            for key, value in raw_tasks.items()
+            if isinstance(value, (AgentTask, dict))
+        }
+        self.action_runs = {
+            str(key): (
+                value if isinstance(value, ActionRun) else ActionRun.from_dict(value)
+            )
+            for key, value in raw_runs.items()
+            if isinstance(value, (ActionRun, dict))
+        }
+        self.processed_event_ids = ensure_string_list(self.processed_event_ids)
 
     @staticmethod
     def new(agent_id: str) -> "AgentState":
@@ -392,13 +551,36 @@ class AgentState:
 
     @staticmethod
     def from_dict(data: JsonDict) -> "AgentState":
+        agent_id = str(data["agent_id"])
+        profile_data = data.get("profile")
+        workspace_data = data.get("workspace")
+        tasks = data.get("tasks") if isinstance(data.get("tasks"), dict) else {}
+        action_runs = (
+            data.get("action_runs")
+            if isinstance(data.get("action_runs"), dict)
+            else {}
+        )
         return AgentState(
-            agent_id=data["agent_id"],
-            profile=AgentProfile.from_dict(data["profile"]),
-            workspace=Workspace.from_dict(data["workspace"]),
-            tasks={k: AgentTask.from_dict(v) for k, v in data.get("tasks", {}).items()},
-            action_runs={k: ActionRun.from_dict(v) for k, v in data.get("action_runs", {}).items()},
-            processed_event_ids=list(data.get("processed_event_ids", [])),
+            agent_id=agent_id,
+            profile=(
+                AgentProfile.from_dict(profile_data)
+                if isinstance(profile_data, dict)
+                else AgentProfile(agent_id=agent_id)
+            ),
+            workspace=Workspace.from_dict(
+                workspace_data if isinstance(workspace_data, dict) else {}
+            ),
+            tasks={
+                str(k): AgentTask.from_dict(v)
+                for k, v in tasks.items()
+                if isinstance(v, dict)
+            },
+            action_runs={
+                str(k): ActionRun.from_dict(v)
+                for k, v in action_runs.items()
+                if isinstance(v, dict)
+            },
+            processed_event_ids=ensure_string_list(data.get("processed_event_ids")),
             version=data.get("version", 0),
             created_at=data.get("created_at", utc_now()),
             updated_at=data.get("updated_at", utc_now()),

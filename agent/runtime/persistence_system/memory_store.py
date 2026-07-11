@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import re
 
-from ...protocols import JsonDict, utc_now
+from ...protocols import JsonDict, ensure_json_dict_list, ensure_string_list, utc_now
 
 
 @dataclass
@@ -21,6 +21,10 @@ class MemoryRecord:
     confidence: float = 1.0
     created_at: str = field(default_factory=utc_now)
     updated_at: str = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        self.tags = ensure_string_list(self.tags)
+        self.source_refs = ensure_json_dict_list(self.source_refs)
 
     def to_dict(self) -> JsonDict:
         return asdict(self)

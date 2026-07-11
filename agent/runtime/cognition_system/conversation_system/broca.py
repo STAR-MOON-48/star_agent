@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List
 
 from ....config import ConversationConfig
-from ....protocols import AgentState, ConversationTurn, JsonDict
+from ....protocols import AgentState, ConversationTurn, JsonDict, ensure_json_dict
 from ...kernel.generator_runtime import GeneratorRuntime
 from ...persistence_system import ConversationStore
 
@@ -13,6 +13,9 @@ from ...persistence_system import ConversationStore
 class BrocaResult:
     text: str
     trace: JsonDict
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "trace", ensure_json_dict(self.trace))
 
 
 class BrocaSystem:

@@ -10,6 +10,7 @@ from ...protocols import (
     ConversationState,
     ConversationTurn,
     JsonDict,
+    ensure_json_dict,
     new_id,
     utc_now,
 )
@@ -30,7 +31,12 @@ class ConversationStore:
         if not path.exists():
             return ConversationState(agent_id=agent_id)
         with path.open("r", encoding="utf-8") as file:
-            return ConversationState.from_dict(json.load(file))
+            data = json.load(file)
+        return (
+            ConversationState.from_dict(data)
+            if isinstance(data, dict)
+            else ConversationState(agent_id=agent_id)
+        )
 
     def save_state(self, state: ConversationState) -> None:
         state.updated_at = utc_now()
@@ -79,8 +85,8 @@ class ConversationStore:
             channel=channel,
             source_event_id=source_event_id,
             utterance=utterance,
-            speaker_context=dict(speaker_context or {}),
-            scene_context=dict(scene_context or {}),
+            speaker_context=ensure_json_dict(speaker_context),
+            scene_context=ensure_json_dict(scene_context),
         )
         state.turns[turn.turn_id] = turn
         session.turn_ids.append(turn.turn_id)
