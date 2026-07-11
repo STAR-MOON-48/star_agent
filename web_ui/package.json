@@ -1,0 +1,28 @@
+{
+  "name": "agent-ling-web-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Star World visual dialogue environment for agent_ling",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "serve": "node dist/src/server.js",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@star-world/core": "file:../../star_world_ts/packages/core",
+    "star-protocol": "file:../../star_protocol_ts",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

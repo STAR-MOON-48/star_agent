@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1017" />
+    <meta name="description" content="Agent Ling 的 Star World 实时对话场景与 Star Protocol 可视化界面" />
+    <title>Ling Scene · Star Dialogue Observatory</title>
+    <link rel="stylesheet" href="/styles.css?v=4" />
+    <script src="/app.js?v=4" defer></script>
+  </head>
+  <body>
+    <svg class="symbol-sprite" aria-hidden="true">
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 2 7 7 3-7 2-2 8-2-8-7-2 7-3 2-7Z" /></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M8.5 15.5 15.5 8M6.8 18.2l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0M17.2 5.8l1-1a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0" /></symbol>
+      <symbol id="i-message" viewBox="0 0 24 24"><path d="M4 4h16v13H9l-5 4V4Z" /><path d="M8 9h8M8 13h5" /></symbol>
+      <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l2.3-7 4.2 14 2.2-7H21" /></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 21c.7-5 3.3-7.5 8-7.5s7.3 2.5 8 7.5" /></symbol>
+      <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="3" /><path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M19 9h4M1 15h4M19 15h4M9 9h6v6H9z" /></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="m3 4 18 8-18 8 3-8-3-8Z" /><path d="M6 12h15" /></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M18.4 10A7 7 0 0 0 6 7.5L4 10M5.6 14A7 7 0 0 0 18 16.5l2-2.5" /></symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="3" /><path d="m7 9 3 3-3 3M13 15h4" /></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="14" rx="4" /><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8" /></symbol>
+    </svg>
+
+    <div class="ambient-grid" aria-hidden="true"></div>
+    <div class="ambient-glow glow-one" aria-hidden="true"></div>
+    <div class="ambient-glow glow-two" aria-hidden="true"></div>
+
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="回到页面顶部">
+          <span class="brand-orbit"><svg><use href="#i-star"></use></svg></span>
+          <span><strong>LING SCENE</strong><small>STAR DIALOGUE OBSERVATORY</small></span>
+        </a>
+        <div class="scene-heading">
+          <span class="micro-label">ACTIVE ENVIRONMENT</span>
+          <h1 id="scene-title">正在加载场景…</h1>
+          <span id="scene-id" class="scene-id">ENV / —</span>
+        </div>
+        <div class="connection-cluster">
+          <span id="clock" class="clock">--:--:--</span>
+          <button id="voice-live-button" class="voice-live-button" type="button" disabled aria-pressed="false" title="开启持续语音对话">
+            <span class="voice-live-icon"><svg><use href="#i-mic"></use></svg><i></i></span>
+            <span><strong>VOICE LIVE</strong><small id="voice-live-label">未配置</small></span>
+          </button>
+          <div id="connection-pill" class="connection-pill is-connecting" role="status">
+            <i></i><span id="connection-label">连接浏览器通道</span>
+          </div>
+          <button id="reconnect-button" class="round-button" type="button" title="重连 Star Hub" aria-label="重连 Star Hub">
+            <svg><use href="#i-refresh"></use></svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="metric-strip" aria-label="场景指标">
+        <article><span class="metric-index">01</span><div><strong id="metric-online">—</strong><small>在线节点</small></div></article>
+        <article><span class="metric-index">02</span><div><strong id="metric-messages">—</strong><small>对话消息</small></div></article>
+        <article><span class="metric-index">03</span><div><strong id="metric-actions">—</strong><small>环境动作</small></div></article>
+        <article><span class="metric-index">04</span><div><strong id="metric-latency">—</strong><small>最近响应</small></div></article>
+        <article class="metric-wide"><span class="metric-index">LIVE</span><div><strong id="agent-availability">等待 Agent</strong><small id="browser-count">0 个观察端</small></div></article>
+      </section>
+
+      <div class="workspace">
+        <aside class="left-column">
+          <section class="panel scene-file">
+            <div class="panel-label"><span>SCENE FILE</span><b>01</b></div>
+            <p id="scene-background" class="scene-copy">—</p>
+            <dl class="fact-list">
+              <div><dt>Hub</dt><dd id="hub-url">—</dd></div>
+              <div><dt>Conversation</dt><dd id="conversation-id">—</dd></div>
+            </dl>
+          </section>
+
+          <section class="panel identity-file">
+            <div class="panel-label"><span>HUMAN IDENTITY</span><b>02</b></div>
+            <div class="portrait-lockup">
+              <span id="human-monogram" class="portrait">H</span>
+              <div><h2 id="human-name">—</h2><p id="human-id">—</p></div>
+            </div>
+            <dl class="identity-details">
+              <div><dt>身份</dt><dd id="human-role">—</dd></div>
+              <div><dt>背景</dt><dd id="human-background">—</dd></div>
+              <div><dt>关系</dt><dd id="human-relationship">—</dd></div>
+            </dl>
+          </section>
+
+          <section class="panel roster-file">
+            <div class="panel-label"><span>PARTICIPANTS</span><b id="participant-count">0</b></div>
+            <div id="participant-list" class="participant-list"></div>
+          </section>
+        </aside>
+
+        <section class="center-column">
+          <section class="panel scene-stage-panel">
+            <div class="stage-toolbar">
+              <div><span class="micro-label">LIVE TOPOLOGY / ECS</span><h2>实时对话场</h2></div>
+              <div class="legend"><span><i class="legend-dot human"></i>Human</span><span><i class="legend-dot agent"></i>Agent</span><span><i class="legend-dot environment"></i>Environment</span></div>
+            </div>
+            <div id="scene-stage" class="scene-stage">
+              <div class="stage-grid" aria-hidden="true"></div>
+              <svg id="connection-layer" class="connection-layer" aria-hidden="true"></svg>
+              <div class="scene-core" aria-hidden="true"><span></span><small>STAR<br />HUB</small></div>
+              <div id="participant-layer" class="participant-layer"></div>
+              <div class="coordinate top-left">00.00 / SCENE</div>
+              <div class="coordinate bottom-right">LIVE / 01</div>
+            </div>
+          </section>
+
+          <section class="panel conversation-panel">
+            <div class="conversation-heading">
+              <div><span id="conversation-agent-label" class="micro-label">HUMAN ↔ NPC AGENT</span><h2>对话流</h2></div>
+              <div class="conversation-controls">
+                <label class="agent-selector-label" for="agent-selector">选择 Agent</label>
+                <select id="agent-selector" class="agent-selector" aria-label="选择对话 Agent" disabled>
+                  <option>等待 Agent</option>
+                </select>
+                <span id="agent-activity" class="activity-chip"><i></i>等待 Agent 加入</span>
+              </div>
+            </div>
+            <div id="voice-live-bar" class="voice-live-bar" hidden>
+              <span class="voice-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+              <div><strong id="voice-phase-label">正在准备语音…</strong><small id="voice-transcript">MiMo ASR · Agent · MiMo TTS</small></div>
+              <button id="voice-stop-button" type="button">关闭 LIVE</button>
+            </div>
+            <div id="message-list" class="message-list" aria-live="polite">
+              <div class="empty-state"><svg><use href="#i-message"></use></svg><p>场景已经准备好，Agent 加入后即可开始对话。</p></div>
+            </div>
+            <form id="composer" class="composer">
+              <label class="sr-only" for="message-input">发送给 Agent 的消息</label>
+              <textarea id="message-input" rows="1" maxlength="4000" placeholder="等待 Agent 加入场景…" disabled></textarea>
+              <div class="composer-meta"><span id="composer-hint">Enter 发送 · Shift + Enter 换行</span><span id="character-count">0 / 4000</span></div>
+              <button id="send-button" type="submit" disabled><span>发送</span><svg><use href="#i-send"></use></svg></button>
+            </form>
+          </section>
+        </section>
+
+        <aside class="right-column panel protocol-panel">
+          <div class="protocol-heading">
+            <div><span class="micro-label">STAR PROTOCOL</span><h2>协议活动</h2></div>
+            <svg><use href="#i-terminal"></use></svg>
+          </div>
+          <div id="protocol-tabs" class="protocol-tabs" role="tablist" aria-label="协议事件筛选">
+            <button class="is-active" type="button" data-filter="all">全部</button>
+            <button type="button" data-filter="action">动作</button>
+            <button type="button" data-filter="error">异常</button>
+          </div>
+          <div id="protocol-list" class="protocol-list"></div>
+          <footer class="protocol-footer"><i></i><span id="revision-label">SNAPSHOT / 000000</span></footer>
+        </aside>
+      </div>
+    </main>
+
+    <div id="toast" class="toast" role="alert" hidden></div>
+  </body>
+</html>
