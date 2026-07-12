@@ -1,5 +1,7 @@
 # Agent Tool Loop MVP：事件驱动、任务中心的自主交互 Agent Runtime
 
+并行重构版本位于 [`agent_ling_refactor/`](agent_ling_refactor/README.md)。它保留 Wernicke → Broca 的普通对话链路，改为自然语言区域交接、精简 Prompt，并让理解完成后的表达与决策按需并发；原实现仍可独立运行和回退。
+
 这是一个最小可运行版本，用来验证我们讨论的 agent 架构地基：
 
 ```text

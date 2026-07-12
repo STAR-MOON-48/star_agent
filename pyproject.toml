@@ -15,6 +15,9 @@ agent-ling-star = "agent_ling.entrypoints.star_agent:main"
 agent-ling-console = "agent_ling.entrypoints.web_ui:main"
 agent-ling-web = "agent_ling.entrypoints.web_ui:main"
 agent-ling-console-tui = "agent_ling.entrypoints.console_ui:main"
+agent-ling-refactor = "agent_ling_refactor.entrypoints.console:main"
+agent-ling-refactor-star = "agent_ling_refactor.entrypoints.star_agent:main"
+agent-ling-refactor-web = "agent_ling_refactor.entrypoints.web_ui:main"
 
 
 [build-system]
@@ -23,9 +26,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-data]
 agent_ling = ["config/*.toml"]
+agent_ling_refactor = ["config/*.toml"]
 
 [tool.setuptools.packages.find]
-include = ["agent", "agent.*", "agent_ling", "agent_ling.*"]
+include = ["agent", "agent.*", "agent_ling", "agent_ling.*", "agent_ling_refactor", "agent_ling_refactor.*"]
 namespaces = false
 
 [tool.uv]
