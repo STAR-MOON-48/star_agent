@@ -43,6 +43,12 @@ class ActivationSettings:
 
 
 @dataclass(frozen=True)
+class ControlSettings:
+    enabled: bool
+    poll_interval_seconds: float
+
+
+@dataclass(frozen=True)
 class PromptSettings:
     common_rules: str
     role_descriptions: dict[MessagePurpose, str]
@@ -62,6 +68,7 @@ class RefactorSettings:
     runtime: RuntimeSettings
     conversation: ConversationSettings
     activation: ActivationSettings
+    control: ControlSettings
     prompts: PromptSettings
     memory: MemoryConfig
     emotion: EmotionConfig
@@ -87,6 +94,7 @@ def load_refactor_settings(path: str | Path | None = None) -> RefactorSettings:
     runtime_data = _table(data.get("runtime"))
     conversation_data = _table(data.get("conversation"))
     activation_data = _table(data.get("activation"))
+    control_data = _table(data.get("control"))
     prompt_data = _table(data.get("prompts"))
     role_data = _table(prompt_data.get("roles"))
     memory_data = _table(data.get("memory"))
@@ -150,6 +158,12 @@ def load_refactor_settings(path: str | Path | None = None) -> RefactorSettings:
             ),
             backoff_max_seconds=max(
                 1.0, float(activation_data.get("backoff_max_seconds", 300))
+            ),
+        ),
+        control=ControlSettings(
+            enabled=bool(control_data.get("enabled", True)),
+            poll_interval_seconds=max(
+                0.05, float(control_data.get("poll_interval_seconds", 0.25))
             ),
         ),
         prompts=PromptSettings(

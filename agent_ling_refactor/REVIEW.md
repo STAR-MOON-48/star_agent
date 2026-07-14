@@ -25,6 +25,16 @@
 
 启动目标也不再伪装成 sender=`startup` 的用户消息，而是以 `runtime.objective` 直接进入 Decision。这同时消除了虚假 recipient 404 和两次无意义的 Understanding/Expression 调用。
 
+### 内部思维注入不是用户对话
+
+运行时控制采用独立的本地持久化 inbox。操作员可以把一段自然语言分别路由到 Decision、DMN 或 workspace note：
+
+- Decision directive 会开启新的有限认知链，但没有 conversation turn 和 recipient；
+- DMN directive 触发一次指定主题反思，只有产生行动价值才继续形成 `agent.thought`；
+- Note 不调用模型。
+
+指令使用原子文件写入，并经过 inbox → processing → processed 生命周期。Runtime 只有在事件已经 checkpoint 后才确认处理，进程中断时 processing 指令会在重启后恢复。
+
 ### 1. Prompt 承担了过多 Runtime 正确性
 
 原默认配置约 1.7 万字符。Decision Prompt 同时解释角色边界、工具协议、内部任务工具、任务树调度、完成门槛、重试、上下文选择、长期记忆、Star 工具来源和外部状态判断。

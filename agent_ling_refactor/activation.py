@@ -51,6 +51,16 @@ class ModelActivationGate:
             return decision
         return ActivationDecision(True, "new runtime objective starts a bounded decision chain")
 
+    def begin_operator_directive(
+        self,
+        state: AgentState,
+        event: AgentEvent,
+    ) -> ActivationDecision:
+        decision = self._begin_chain(state, event)
+        if not decision.activate:
+            return decision
+        return ActivationDecision(True, "explicit internal operator directive")
+
     def _begin_chain(self, state: AgentState, event: AgentEvent) -> ActivationDecision:
         if self.in_backoff(state):
             return ActivationDecision(False, "model provider backoff is active")

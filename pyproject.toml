@@ -18,6 +18,7 @@ agent-ling-console-tui = "agent_ling.entrypoints.console_ui:main"
 agent-ling-refactor = "agent_ling_refactor.entrypoints.console:main"
 agent-ling-refactor-star = "agent_ling_refactor.entrypoints.star_agent:main"
 agent-ling-refactor-web = "agent_ling_refactor.entrypoints.web_ui:main"
+agent-ling-refactor-thought = "agent_ling_refactor.entrypoints.thought:main"
 
 
 [build-system]

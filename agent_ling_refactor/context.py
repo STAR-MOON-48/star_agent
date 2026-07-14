@@ -181,6 +181,10 @@ def event_to_natural_text(event: AgentEvent) -> str:
         return content or "运行时发现还有可以继续推进的工作。"
     if event.type == "runtime.objective":
         return f"当前自主目标是：{content}"
+    if event.type == "operator.directive":
+        return f"操作员给出了一条内部思考方向：{content}"
+    if event.type == "operator.note":
+        return f"操作员写入了一条内部备注：{content}"
     if content:
         return f"收到 {event.type} 事件：{content}"
     return f"收到 {event.type} 事件。详情是：{natural_value(event.payload)}"

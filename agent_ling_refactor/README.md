@@ -135,6 +135,46 @@ Profile 仍保留 Ling 的身份、价值观、表达方式和边界，但 Promp
 - `max_decision_hops`：单个用户输入或自主目标最多派生的 Decision 跳数；
 - `backoff_initial_seconds` / `backoff_max_seconds`：限流和临时错误的指数退避范围。
 
+## 运行时注入内部思考
+
+在 Agent 运行时，可以从另一个终端注入自然语言内部指令。它使用本地持久化 control inbox，不经过 Star 用户消息，也不进入 Broca。
+
+直接改变 Decision 的思考方向：
+
+```bash
+uv run agent-ling-refactor-thought \
+  --state-dir ./.agent_state_refactor \
+  --agent-id agent_ling_refactor \
+  --target decision \
+  "先检查失败是否来自未满足的前置条件，不要立即重复动作"
+```
+
+让 DMN 围绕一个突发想法做反思：
+
+```bash
+uv run agent-ling-refactor-thought \
+  --state-dir ./.agent_state_refactor \
+  --agent-id agent_ling_refactor \
+  --target dmn \
+  "想一想最近几次失败是否存在共同模式"
+```
+
+只写入内部工作记忆，不请求模型：
+
+```bash
+uv run agent-ling-refactor-thought \
+  --state-dir ./.agent_state_refactor \
+  --agent-id agent_ling_refactor \
+  --target note \
+  "后续判断优先保留证据来源"
+```
+
+- `decision`：开启一条新的、有 hop budget 的内部 Decision 链；可以使用工具，但没有对话对象，因此不会自动对外回复。
+- `dmn`：强制执行一次围绕该主题的反思，反思先写入 workspace；如果产生明确行动价值，再形成 `agent.thought`。
+- `note`：只保存为操作员内部备注，模型调用数为零。
+
+`--state-dir` 和 `--agent-id` 必须与正在运行的 Agent 完全一致。默认监听可以通过 `[control] enabled` 和 `poll_interval_seconds` 配置。
+
 ## 兼容与回退
 
 - 原 `agent/`、`agent_ling/` 和 `web_ui/` 未被替换；

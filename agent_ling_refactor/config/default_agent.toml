@@ -33,6 +33,10 @@ max_decision_hops = 6
 backoff_initial_seconds = 15
 backoff_max_seconds = 300
 
+[control]
+enabled = true
+poll_interval_seconds = 0.25
+
 [prompts]
 common_rules = """
 所有区域之间只用自然语言交接，不输出 JSON 命令或内部分析。

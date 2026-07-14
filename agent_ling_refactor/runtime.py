@@ -37,6 +37,7 @@ from agent.runtime.state_systems import MemorySystem
 
 from .activation import ActivationDecision, ModelActivationGate
 from .context import ContextComposer, event_to_natural_text
+from .control import ControlInbox
 from .conversation import ConversationLedger
 from .messages import MessagePurpose, NaturalMessage
 from .model_gateway import ModelGateway, ModelTurn, ToolCall, action_spec_to_tool
@@ -97,6 +98,7 @@ class RefactoredRuntime:
         "timer.fired",
         "runtime.continue",
         "runtime.objective",
+        "operator.directive",
         "agent.thought",
         "protocol.event",
         "protocol.action",
@@ -149,10 +151,12 @@ class RefactoredRuntime:
             settings=settings.runtime,
         )
         self.context = ContextComposer(settings.runtime)
+        self.control_inbox = ControlInbox(store.root, agent_id)
         self._worker: asyncio.Task[None] | None = None
         self._protocol_worker: asyncio.Task[None] | None = None
         self._dmn_worker: asyncio.Task[None] | None = None
         self._memory_worker: asyncio.Task[None] | None = None
+        self._control_worker: asyncio.Task[None] | None = None
         self._delayed: set[asyncio.Task[None]] = set()
         self._lock = asyncio.Lock()
         self._stopping = asyncio.Event()
@@ -189,6 +193,9 @@ class RefactoredRuntime:
             self._dmn_worker = asyncio.create_task(self._dmn_loop())
         if self.settings.memory.enabled and self.settings.memory.reflection_enabled:
             self._memory_worker = asyncio.create_task(self._memory_loop())
+        if self.settings.control.enabled:
+            self.control_inbox.recover()
+            self._control_worker = asyncio.create_task(self._control_loop())
 
     async def stop(self) -> None:
         self._stopping.set()
@@ -199,6 +206,7 @@ class RefactoredRuntime:
                 self._protocol_worker,
                 self._dmn_worker,
                 self._memory_worker,
+                self._control_worker,
                 *tuple(self._delayed),
             )
             if task is not None
@@ -342,11 +350,24 @@ class RefactoredRuntime:
                         model_requested = True
                         audit = await self._handle_memory_reflection(state, event)
                         comment = "natural-language memory reflection"
+                elif event.type == "operator.note":
+                    content = str(event.payload.get("content") or "").strip()
+                    if content:
+                        state.workspace.note(f"操作员内部备注：{content}")
+                    audit = {
+                        "internal_control": "note_recorded",
+                        "content": content,
+                    }
+                    comment = "operator note stored without model activation"
                 elif self._is_decision_event(event):
                     admission = (
                         self.activation.begin_objective(state, event)
                         if event.type == "runtime.objective"
-                        else self.activation.evaluate(state, event)
+                        else (
+                            self.activation.begin_operator_directive(state, event)
+                            if event.type == "operator.directive"
+                            else self.activation.evaluate(state, event)
+                        )
                     )
                     if admission.activate:
                         model_requested = True
@@ -589,6 +610,8 @@ class RefactoredRuntime:
         )
         if not expression_content and not executable_calls:
             expression_content = decided.text
+        if expression_content and turn is None:
+            state.workspace.note(f"内部决策结果：{expression_content}")
         if expression_content and turn is not None:
             expression = NaturalMessage(
                 sender="decision",
@@ -1055,6 +1078,22 @@ class RefactoredRuntime:
                 continue
             await self.event_bus.publish(event)
             self.registry.register_many(self.protocol.list_action_specs())
+
+    async def _control_loop(self) -> None:
+        while not self._stopping.is_set():
+            items = self.control_inbox.claim(limit=10)
+            if not items:
+                await asyncio.sleep(self.settings.control.poll_interval_seconds)
+                continue
+            for item in items:
+                event = item.directive.to_event()
+                await self.event_bus.publish(event)
+                while not self._stopping.is_set():
+                    state = self.store.load_state(self.agent_id)
+                    if event.event_id in state.processed_event_ids:
+                        self.control_inbox.acknowledge(item)
+                        break
+                    await asyncio.sleep(self.settings.control.poll_interval_seconds)
 
     async def _dmn_loop(self) -> None:
         while not self._stopping.is_set():
