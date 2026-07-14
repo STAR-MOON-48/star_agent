@@ -37,8 +37,8 @@ namespaces = false
 package = true
 
 [tool.uv.sources]
-menglong = { path = "../New_MengLong", editable = true }
-star-protocol = { path = "../star_protocol_python", editable = true }
+menglong = { git = "https://github.com/gcyyfun/menglong.git" }
+star-protocol = { git = "https://github.com/gcyyfun/star-protocol.git", branch = "python" }
 
 
 [tool.pytest.ini_options]
