@@ -176,6 +176,26 @@ uv run python demo/conversation_demo.py
 uv run agent-ling-star --agent-id agent_ling --hub-url ws://localhost:8000 --env-id demo_env
 ```
 
+### 最小 Tool Loop Baseline
+
+`baseline_agent/` 提供一个用于对照实验的经典 tool loop：模型产生 tool call，
+通过 Star Protocol 执行环境 action，把 outcome 作为 tool message 放回上下文，
+直到模型返回不含 tool call 的最终文本。它不包含任务树、持久化、记忆、情绪或自主调度。
+
+启动并提交一个初始目标：
+
+```bash
+uv run agent-ling-baseline-star \
+  --agent-id baseline_agent \
+  --hub-url ws://localhost:8000 \
+  --env-id demo_env \
+  --objective "观察环境并完成当前可推进的任务"
+```
+
+省略 `--objective` 时，Agent 会保持在线，等待 Star action/event 形式的
+`user_message`；最终回复会以 `assistant.message` 发送给原 sender。每个请求最多执行
+`--max-steps` 轮，默认 20。
+
 启动后默认会在 Star 工具 discover 完成后提交一个 startup objective，要求 agent 使用外部 `star_protocol` 工具观察环境、列出任务和活动，并持续推进到完成、失败、取消或阻塞。如果只想挂起等待外部用户消息：
 
 ```bash
