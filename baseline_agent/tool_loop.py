@@ -6,10 +6,12 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 from uuid import uuid4
 
-from menglong import Assistant, Context, System, Tool, User
+from menglong import Assistant, Tool
 
 from agent.protocols import ActionSpec, AgentEvent, JsonDict, ensure_json_dict
 from agent.runtime.interfaces import ModelInterface, ProtocolInterface
+
+from .context import ContextBudget, RollingToolContext, ToolRound
 
 
 DEFAULT_SYSTEM_PROMPT = """\
@@ -56,6 +58,13 @@ class ToolLoopAgent:
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         max_steps: int = 20,
         max_tokens: int = 2048,
+        context_window_tokens: int = 1_000_000,
+        context_safety_margin_tokens: int = 8192,
+        compaction_trigger_ratio: float = 0.85,
+        compaction_target_ratio: float = 0.35,
+        keep_recent_rounds: int = 4,
+        summary_max_tokens: int = 4096,
+        chars_per_token: float = 2.0,
         trace: Optional[TraceCallback] = None,
     ) -> None:
         if max_steps < 1:
@@ -66,6 +75,16 @@ class ToolLoopAgent:
         self.system_prompt = system_prompt.strip()
         self.max_steps = max_steps
         self.max_tokens = max_tokens
+        self.context_budget = ContextBudget(
+            max_context_tokens=context_window_tokens,
+            reserve_output_tokens=max_tokens,
+            safety_margin_tokens=context_safety_margin_tokens,
+            trigger_ratio=compaction_trigger_ratio,
+            target_ratio=compaction_target_ratio,
+            keep_recent_rounds=keep_recent_rounds,
+            summary_max_tokens=summary_max_tokens,
+            chars_per_token=chars_per_token,
+        )
         self.trace = trace
 
         self._inbox: asyncio.Queue[_Request] = asyncio.Queue()
@@ -170,9 +189,11 @@ class ToolLoopAgent:
             raise RuntimeError("ToolLoopAgent must be started before run().")
 
         request_id = f"baseline_{uuid4().hex[:12]}"
-        context = Context()
-        context.add(System(self.system_prompt))
-        context.add(User(objective))
+        rolling_context = RollingToolContext(
+            system_prompt=self.system_prompt,
+            objective=objective,
+            budget=self.context_budget,
+        )
         self._emit_trace(
             "request.started",
             {"request_id": request_id, "objective": objective},
@@ -186,6 +207,14 @@ class ToolLoopAgent:
                     self._model_tool(spec) for spec in specs.values()
                 ]
 
+            model_tools = list(model_kwargs.get("tools") or [])
+            context, _ = await rolling_context.prepare(
+                model=self.model,
+                tools=model_tools,
+                request_id=request_id,
+                step=step,
+                trace=self.trace,
+            )
             result = await self.model.chat(context, **model_kwargs)
             tool_calls = self._extract_tool_calls(result.raw)
             self._emit_trace(
@@ -222,19 +251,19 @@ class ToolLoopAgent:
                 )
                 return answer
 
-            context.add(
-                Assistant(
-                    content=result.text or "",
-                    actions=[
-                        {
-                            "id": call.call_id,
-                            "name": call.name,
-                            "arguments": call.arguments,
-                        }
-                        for call in tool_calls
-                    ],
-                )
+            assistant_message = Assistant(
+                content=result.text or "",
+                actions=[
+                    {
+                        "id": call.call_id,
+                        "name": call.name,
+                        "arguments": call.arguments,
+                    }
+                    for call in tool_calls
+                ],
             )
+            round_messages: list[Any] = [assistant_message]
+            round_outcomes: list[JsonDict] = []
             for call in tool_calls:
                 outcome = await self._execute_tool(
                     call,
@@ -242,13 +271,40 @@ class ToolLoopAgent:
                     task_id=request_id,
                     causation_id=causation_id,
                 )
-                context.add(
+                round_outcomes.append(
+                    {
+                        "tool_call_id": call.call_id,
+                        "name": call.name,
+                        "outcome": outcome,
+                    }
+                )
+                round_messages.append(
                     Tool(
                         tool_id=call.call_id,
                         name=call.name,
-                        content=json.dumps(outcome, ensure_ascii=False, default=str),
+                        content=json.dumps(
+                            outcome,
+                            ensure_ascii=False,
+                            default=str,
+                        ),
                     )
                 )
+            rolling_context.add_round(
+                ToolRound(
+                    step=step,
+                    assistant_text=result.text or "",
+                    tool_calls=[
+                        {
+                            "id": call.call_id,
+                            "name": call.name,
+                            "arguments": call.arguments,
+                        }
+                        for call in tool_calls
+                    ],
+                    tool_outcomes=round_outcomes,
+                    messages=round_messages,
+                )
+            )
 
         answer = (
             f"Stopped after reaching the maximum of {self.max_steps} tool-loop steps."
